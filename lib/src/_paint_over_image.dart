@@ -19,13 +19,10 @@ export '_image_painter.dart';
 ///[ImagePainter] widget.
 @immutable
 class ImagePainter extends StatefulWidget {
-  const ImagePainter._({
+  const ImagePainter({
     Key? key,
     required this.controller,
-    this.assetPath,
-    this.networkUrl,
-    this.byteArray,
-    this.file,
+    required this.provider,
     this.height,
     this.width,
     this.placeHolder,
@@ -78,10 +75,10 @@ class ImagePainter extends StatefulWidget {
     VoidCallback? onUndo,
     VoidCallback? onClear,
   }) {
-    return ImagePainter._(
+    return ImagePainter(
       key: key,
       controller: controller,
-      networkUrl: url,
+      provider: NetworkImage(url),
       height: height,
       width: width,
       placeHolder: placeholderWidget,
@@ -108,7 +105,7 @@ class ImagePainter extends StatefulWidget {
 
   ///Constructor for loading image from assetPath.
   factory ImagePainter.asset(
-    String path, {
+    String assetName, {
     required ImagePainterController controller,
     Key? key,
     double? height,
@@ -133,10 +130,10 @@ class ImagePainter extends StatefulWidget {
     VoidCallback? onUndo,
     VoidCallback? onClear,
   }) {
-    return ImagePainter._(
+    return ImagePainter(
       controller: controller,
+      provider: AssetImage(assetName),
       key: key,
-      assetPath: path,
       height: height,
       width: width,
       isScalable: scalable ?? false,
@@ -188,10 +185,10 @@ class ImagePainter extends StatefulWidget {
     VoidCallback? onUndo,
     VoidCallback? onClear,
   }) {
-    return ImagePainter._(
+    return ImagePainter(
       controller: controller,
+      provider: FileImage(file),
       key: key,
-      file: file,
       height: height,
       width: width,
       placeHolder: placeholderWidget,
@@ -243,10 +240,10 @@ class ImagePainter extends StatefulWidget {
     VoidCallback? onUndo,
     VoidCallback? onClear,
   }) {
-    return ImagePainter._(
+    return ImagePainter(
       controller: controller,
+      provider: MemoryImage(byteArray),
       key: key,
-      byteArray: byteArray,
       height: height,
       width: width,
       placeHolder: placeholderWidget,
@@ -296,8 +293,9 @@ class ImagePainter extends StatefulWidget {
     VoidCallback? onUndo,
     VoidCallback? onClear,
   }) {
-    return ImagePainter._(
+    return ImagePainter(
       controller: controller,
+      provider: null,
       key: key,
       height: height,
       width: width,
@@ -327,17 +325,7 @@ class ImagePainter extends StatefulWidget {
   /// Class that holds the controller and it's methods.
   final ImagePainterController controller;
 
-  ///Only accessible through [ImagePainter.network] constructor.
-  final String? networkUrl;
-
-  ///Only accessible through [ImagePainter.memory] constructor.
-  final Uint8List? byteArray;
-
-  ///Only accessible through [ImagePainter.file] constructor.
-  final File? file;
-
-  ///Only accessible through [ImagePainter.asset] constructor.
-  final String? assetPath;
+  final ImageProvider? provider;
 
   ///Height of the Widget. Image is subjected to fit within the given height.
   final double? height;
@@ -416,6 +404,7 @@ class ImagePainterState extends State<ImagePainter> {
 
   int _strokeMultiplier = 1;
   late TextDelegate textDelegate;
+
   @override
   void initState() {
     super.initState();
@@ -450,39 +439,13 @@ class ImagePainterState extends State<ImagePainter> {
 
   ///Converts the incoming image type from constructor to [ui.Image]
   Future<void> _resolveAndConvertImage() async {
-    if (widget.networkUrl != null) {
-      _image = await _loadNetworkImage(widget.networkUrl!);
+    if (widget.provider != null) {
+      _image = await _loadProviderImage(widget.provider!);
       if (_image != null) {
         _controller.setImage(_image!);
         _setStrokeMultiplier();
       } else {
-        throw ("${widget.networkUrl} couldn't be resolved.");
-      }
-    } else if (widget.assetPath != null) {
-      final img = await rootBundle.load(widget.assetPath!);
-      _image = await _convertImage(Uint8List.view(img.buffer));
-      if (_image != null) {
-        _controller.setImage(_image!);
-        _setStrokeMultiplier();
-      } else {
-        throw ("${widget.assetPath} couldn't be resolved.");
-      }
-    } else if (widget.file != null) {
-      final img = await widget.file!.readAsBytes();
-      _image = await _convertImage(img);
-      if (_image != null) {
-        _controller.setImage(_image!);
-        _setStrokeMultiplier();
-      } else {
-        throw ("Image couldn't be resolved from provided file.");
-      }
-    } else if (widget.byteArray != null) {
-      _image = await _convertImage(widget.byteArray!);
-      if (_image != null) {
-        _controller.setImage(_image!);
-        _setStrokeMultiplier();
-      } else {
-        throw ("Image couldn't be resolved from provided byteArray.");
+        throw ("${widget.provider} couldn't be resolved.");
       }
     } else {
       _isLoaded.value = true;
@@ -498,21 +461,9 @@ class ImagePainterState extends State<ImagePainter> {
     _controller.update(strokeMultiplier: _strokeMultiplier);
   }
 
-  ///Completer function to convert asset or file image to [ui.Image] before drawing on custompainter.
-  Future<ui.Image> _convertImage(Uint8List img) async {
-    final completer = Completer<ui.Image>();
-    ui.decodeImageFromList(img, (image) {
-      _isLoaded.value = true;
-      return completer.complete(image);
-    });
-    return completer.future;
-  }
-
-  ///Completer function to convert network image to [ui.Image] before drawing on custompainter.
-  Future<ui.Image> _loadNetworkImage(String path) async {
+  Future<ui.Image> _loadProviderImage(ImageProvider<Object> imageProvider) async {
     final completer = Completer<ImageInfo>();
-    final img = NetworkImage(path);
-    img.resolve(const ImageConfiguration()).addListener(
+    imageProvider.resolve(const ImageConfiguration()).addListener(
         ImageStreamListener((info, _) => completer.complete(info)));
     final imageInfo = await completer.future;
     _isLoaded.value = true;
